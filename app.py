@@ -1,6 +1,4 @@
 from flask import Flask, request, jsonify, send_file
-from reportlab.lib.pagesizes import letter
-from reportlab.pdfgen import canvas
 import PyPDF2
 import requests
 import io
@@ -8,16 +6,7 @@ import os
 
 app = Flask(__name__)
 
-W, H = letter
-W_IMG, H_IMG = 1241, 1754
-SCALE_X = W / W_IMG
-SCALE_Y = H / H_IMG
-
 PDF_URL = "https://portal.grupofipcol.com/Formatos/Area_comercial/Banco_Union/AUTORIZACIONES_DE_CONSULTA/AUTORIZACION_CONSULTAS_OCT_2025.pdf"
-
-
-def pt(px_x, px_y):
-    return round(px_x * SCALE_X, 1), round(H - px_y * SCALE_Y, 1)
 
 
 def num_letras(n):
@@ -68,7 +57,7 @@ def separar_nombre(nombre_completo):
 
 
 def generar_pdf_ft449(datos):
-    # 1. Obtener PDF base del banco
+    # 1. Obtener PDF base
     pdf_original = None
     try:
         resp = requests.get(PDF_URL, timeout=10)
@@ -87,11 +76,10 @@ def generar_pdf_ft449(datos):
     cedula    = datos.get('cedula', '')
     telefono  = datos.get('telefono', '')
     pagaduria = datos.get('pagaduria', '').upper()
-    monto     = datos.get('monto', '')
-    plazo     = str(datos.get('plazo', '144'))
+    plazo     = str(datos.get('plazo', '144')) + ' meses'
     direccion = datos.get('direccion', '').upper()
     ciudad    = datos.get('ciudad', '').upper()
-    destino   = datos.get('destino', 'Libre Inversion')
+    destino   = datos.get('destino', 'Libre Inversion').upper()
 
     fecha_hoy = datos.get('fechaHoy', '')
     partes_fecha = fecha_hoy.split('/')
@@ -104,61 +92,36 @@ def generar_pdf_ft449(datos):
         monto_num = int(str(monto_num).replace('.','').replace(',','').replace('$',''))
     except:
         monto_num = 0
+    monto_str = '$' + f'{monto_num:,}'.replace(',', '.')
     monto_letras = num_letras(monto_num) + ' PESOS' if monto_num > 0 else ''
 
-    # 3. Crear overlay de texto
-    packet = io.BytesIO()
-    c = canvas.Canvas(packet, pagesize=letter)
+    # 3. Llenar campos del formulario PDF por nombre
+    reader = PyPDF2.PdfReader(pdf_original)
+    writer = PyPDF2.PdfWriter()
+    writer.append(reader)
 
-    # Fecha
-    c.setFont("Helvetica", 8)
-    c.drawString(*pt(588, 268), dd)
-    c.drawString(*pt(630, 268), mm)
-    c.drawString(*pt(668, 268), aaaa)
+    campos = {
+        'fecha_dia': dd,
+        'fecha_mes': mm,
+        'fecha_anio': aaaa,
+        'valor_solicitado': monto_str + '\n' + monto_letras,
+        'plazo': plazo,
+        'pagaduria': pagaduria,
+        'destino_del_credito': destino,
+        'apellidos': apellidos,
+        'nombres': nombres,
+        'tipo_identificacion': 'X',
+        'numero_identificacion': cedula,
+        'direccion_residencia': direccion,
+        'ciudad_residencia': ciudad,
+        'numero_celular': telefono,
+        'tipo_originador': 'X',
+        'coordinador_comercial': 'Carmen Gonzalez',
+        'nombre_outsourcing': 'Grupo Fipcol SAS',
+        'nit_outsourcing': '901542631-1',
+    }
 
-    # Sección 1 - Datos solicitud
-    c.drawString(*pt(72,  574), monto)
-    c.drawString(*pt(297, 574), plazo + ' meses')
-    c.drawString(*pt(385, 574), pagaduria)
-    c.drawString(*pt(648, 574), destino)
-    c.setFont("Helvetica", 7)
-    c.drawString(*pt(72,  600), monto_letras[:85])
-
-    # Sección 2 - Info personal fila 1
-    c.setFont("Helvetica", 8)
-    c.drawString(*pt(72,  895), apellidos)
-    c.drawString(*pt(305, 895), nombres)
-    c.setFont("Helvetica", 9)
-    c.drawString(*pt(556, 896), 'X')
-    c.setFont("Helvetica", 8)
-    c.drawString(*pt(870, 895), cedula)
-
-    # Sección 2 - Info personal fila 2
-    c.drawString(*pt(72,  942), direccion)
-    c.drawString(*pt(500, 942), ciudad)
-    c.drawString(*pt(850, 942), telefono)
-
-    # Sección 2 - Originador fila 3
-    c.setFont("Helvetica", 9)
-    c.drawString(*pt(243, 978), 'X')
-    c.setFont("Helvetica", 7.5)
-    c.drawString(*pt(430, 978), 'Carmen Gonzalez')
-    c.drawString(*pt(780, 978), 'Grupo Fipcol SAS')
-
-    # Cedula bajo firma
-    c.setFont("Helvetica", 8)
-    c.drawString(*pt(530, 1492), cedula)
-
-    c.save()
-    packet.seek(0)
-
-    # 4. Merge con PDF original
-    overlay  = PyPDF2.PdfReader(packet)
-    original = PyPDF2.PdfReader(pdf_original)
-    writer   = PyPDF2.PdfWriter()
-    page = original.pages[0]
-    page.merge_page(overlay.pages[0])
-    writer.add_page(page)
+    writer.update_page_form_field_values(writer.pages[0], campos)
 
     output = io.BytesIO()
     writer.write(output)
@@ -184,7 +147,6 @@ def endpoint_ft449():
             'cedula': '9776983',
             'telefono': '3168671944',
             'pagaduria': 'FIDUPREVISORA',
-            'monto': '$123.700.000',
             'montoNum': 123700000,
             'plazo': '144',
             'direccion': 'CALLE 6N # 4-200',
