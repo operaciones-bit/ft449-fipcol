@@ -1,8 +1,9 @@
 from flask import Flask, request, jsonify, send_file
-import PyPDF2
+from fillpdf import fillpdfs
 import requests
 import io
 import os
+import tempfile
 
 app = Flask(__name__)
 
@@ -57,21 +58,6 @@ def separar_nombre(nombre_completo):
 
 
 def generar_pdf_ft449(datos):
-    # 1. Obtener PDF base
-    pdf_original = None
-    try:
-        resp = requests.get(PDF_URL, timeout=10)
-        if resp.status_code == 200:
-            pdf_original = io.BytesIO(resp.content)
-    except:
-        pass
-
-    if pdf_original is None:
-        ruta_local = os.path.join(os.path.dirname(__file__), 'FT449_base.pdf')
-        with open(ruta_local, 'rb') as f:
-            pdf_original = io.BytesIO(f.read())
-
-    # 2. Preparar datos
     apellidos, nombres = separar_nombre(datos.get('nombre', ''))
     cedula    = datos.get('cedula', '')
     telefono  = datos.get('telefono', '')
@@ -95,16 +81,13 @@ def generar_pdf_ft449(datos):
     monto_str = '$' + f'{monto_num:,}'.replace(',', '.')
     monto_letras = num_letras(monto_num) + ' PESOS' if monto_num > 0 else ''
 
-    # 3. Llenar campos del formulario PDF por nombre
-    reader = PyPDF2.PdfReader(pdf_original)
-    writer = PyPDF2.PdfWriter()
-    writer.append(reader)
+    pdf_base_path = os.path.join(os.path.dirname(__file__), 'FT449_base.pdf')
 
     campos = {
         'fecha_dia': dd,
         'fecha_mes': mm,
         'fecha_anio': aaaa,
-        'valor_solicitado': monto_str + '\n' + monto_letras,
+        'valor_solicitado': monto_str + ' - ' + monto_letras,
         'plazo': plazo,
         'pagaduria': pagaduria,
         'destino_del_credito': destino,
@@ -121,11 +104,18 @@ def generar_pdf_ft449(datos):
         'nit_outsourcing': '901542631-1',
     }
 
-    writer.update_page_form_field_values(writer.pages[0], campos)
+    output_path = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf').name
+    fillpdfs.write_fillable_pdf(pdf_base_path, output_path, campos, flatten=False)
 
-    output = io.BytesIO()
-    writer.write(output)
+    with open(output_path, 'rb') as f:
+        output = io.BytesIO(f.read())
     output.seek(0)
+
+    try:
+        os.unlink(output_path)
+    except:
+        pass
+
     return output
 
 
