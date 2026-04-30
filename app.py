@@ -79,7 +79,6 @@ def generar_pdf_ft449(datos):
     except:
         monto_num = 0
     monto_str = '$' + f'{monto_num:,}'.replace(',', '.')
-    monto_letras = num_letras(monto_num) + ' PESOS' if monto_num > 0 else ''
 
     pdf_base_path = os.path.join(os.path.dirname(__file__), 'FT449_base.pdf')
 
@@ -87,18 +86,18 @@ def generar_pdf_ft449(datos):
         'fecha_dia': dd,
         'fecha_mes': mm,
         'fecha_anio': aaaa,
-        'valor_solicitado': monto_str + ' - ' + monto_letras,
+        'valor_solicitado': monto_str,
         'plazo': plazo,
         'pagaduria': pagaduria,
         'destino_del_credito': destino,
         'apellidos': apellidos,
         'nombres': nombres,
-        'tipo_identificacion': 'X',
+        'tipo_identificacion': 'CC',
         'numero_identificacion': cedula,
         'direccion_residencia': direccion,
         'ciudad_residencia': ciudad,
         'numero_celular': telefono,
-        'tipo_originador': 'X',
+        'tipo_originador': 'Outsourcing',
         'coordinador_comercial': 'Carmen Gonzalez',
         'nombre_outsourcing': 'Grupo Fipcol SAS',
         'nit_outsourcing': '901542631-1',
